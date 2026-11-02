@@ -32,6 +32,7 @@
    (java.io File)
    (java.util.regex Pattern)
    (org.owasp.dependencycheck Engine)
+   (org.owasp.dependencycheck.data.update.exception UpdateException)
    (org.owasp.dependencycheck.exception ExceptionCollection)))
 
 (def version
@@ -60,21 +61,40 @@
                               (not (.exists file)))))))
         (s/split classpath-string classpath-separator-re)))
 
-(defn- scan-and-analyze [project]
+(defn update-failures-only?
+  "True when the analysis completed and every error it collected is a failed
+  update of a data source. dependency-check then analysed the dependencies
+  against the data already in its local database, so a report can still be
+  written, although it may miss the most recently published vulnerabilities."
+  [fatal? exceptions]
+  (and (not fatal?)
+       (seq exceptions)
+       (every? #(instance? UpdateException %) exceptions)))
+
+(defn- scan-and-analyze
+  "Scans and analyses the classpath. When the only errors are failed data-source
+  updates, the project carries them as `:analysis-exceptions`, which the report
+  lists under Analysis Exceptions; any other error is rethrown."
+  [project]
   (let [^Engine engine (:engine project)]
     ;; See `parse-classpath` for details on which classpath entries are considered here.
     (doseq [p (:classpath project)]
       (.scan engine ^String p))
     (try
       (.analyzeDependencies engine)
+      project
       (catch ExceptionCollection e
         (println "Encountered errors while analyzing:" (.getMessage e))
         (doseq [exc (.getExceptions e)]
           (println exc))
-        (let [exception-info (ex-info (str `ExceptionCollection)
-                                      {:exceptions (.getExceptions e)})]
-          (throw exception-info))))
-    project))
+        (if (update-failures-only? (.isFatal e) (.getExceptions e))
+          (do
+            (println (style "Unable to update the vulnerability data; the report uses the local database and may miss recently published vulnerabilities."
+                            :bright :yellow))
+            (assoc project :analysis-exceptions (vec (.getExceptions e))))
+          (let [exception-info (ex-info (str `ExceptionCollection)
+                                        {:exceptions (.getExceptions e)})]
+            (throw exception-info)))))))
 
 (defn conditional-exit [{:keys [exit-after-check failed?]
                          {:keys [throw-if-check-unsuccessful?]} :nvd

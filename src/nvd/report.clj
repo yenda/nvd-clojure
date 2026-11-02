@@ -28,7 +28,7 @@
    [nvd.log :as log]
    [table.core :refer [table]])
   (:import
-   (java.util Arrays)
+   (java.util Arrays List)
    (org.owasp.dependencycheck Engine)
    (org.owasp.dependencycheck.dependency Dependency Vulnerability)
    (org.owasp.dependencycheck.exception ExceptionCollection)
@@ -45,7 +45,7 @@
         deps (Arrays/asList (.getDependencies engine))
         analyzers (.getAnalyzers engine)
         settings (.getSettings engine)
-        exception-collection (ExceptionCollection.)
+        exception-collection (ExceptionCollection. ^List (vec (:analysis-exceptions project)))
         rg (ReportGenerator. title deps analyzers db-props settings exception-collection)]
     (.write rg ^String output-dir ^String output-fmt)
     project))
