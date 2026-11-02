@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
  :deps {
         ;; dependency-check-core transitively brings in two versions of
         ;; this dependency, so we explicitly depend on the latest
