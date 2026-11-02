@@ -71,24 +71,30 @@
        (seq exceptions)
        (every? #(instance? UpdateException %) exceptions)))
 
-(defn- scan-and-analyze [project]
+(defn- scan-and-analyze
+  "Scans and analyses the classpath. When the only errors are failed data-source
+  updates, the project carries them as `:analysis-exceptions`, which the report
+  lists under Analysis Exceptions; any other error is rethrown."
+  [project]
   (let [^Engine engine (:engine project)]
     ;; See `parse-classpath` for details on which classpath entries are considered here.
     (doseq [p (:classpath project)]
       (.scan engine ^String p))
     (try
       (.analyzeDependencies engine)
+      project
       (catch ExceptionCollection e
         (println "Encountered errors while analyzing:" (.getMessage e))
         (doseq [exc (.getExceptions e)]
           (println exc))
         (if (update-failures-only? (.isFatal e) (.getExceptions e))
-          (println (style "Unable to update the vulnerability data; the report uses the local database and may miss recently published vulnerabilities."
-                          :bright :yellow))
+          (do
+            (println (style "Unable to update the vulnerability data; the report uses the local database and may miss recently published vulnerabilities."
+                            :bright :yellow))
+            (assoc project :analysis-exceptions (vec (.getExceptions e))))
           (let [exception-info (ex-info (str `ExceptionCollection)
                                         {:exceptions (.getExceptions e)})]
-            (throw exception-info)))))
-    project))
+            (throw exception-info)))))))
 
 (defn conditional-exit [{:keys [exit-after-check failed?]
                          {:keys [throw-if-check-unsuccessful?]} :nvd
